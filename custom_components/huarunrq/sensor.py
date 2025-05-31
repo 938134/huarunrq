@@ -1,11 +1,11 @@
 """Platform for sensor integration."""
 from datetime import timedelta
 import logging
-import requests
 import base64
 import time
 import random
 import json
+import aiohttp
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.backends import default_backend
@@ -32,7 +32,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     async def async_update_data():
         """Fetch data from API."""
         try:
-            return await hass.async_add_executor_job(fetch_data, cno)
+            return await fetch_data(cno)
         except Exception as e:
             raise UpdateFailed(f"Error fetching data: {e}")
 
@@ -44,12 +44,11 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
         update_interval=timedelta(seconds=scan_interval),
     )
 
-    await coordinator.async_config_entry_first_refresh()
-
+    # Do not immediately refresh data on setup
     async_add_entities([HuaRunRQSensor(coordinator, name, cno)], True)
 
-def fetch_data(cno):
-    """Fetch data from the API."""
+async def fetch_data(cno):
+    """Fetch data from the API asynchronously."""
     public_key_pem = '''-----BEGIN PUBLIC KEY-----
     MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAIi4Gb8iOGcc05iqNilFb1gM6/iG4fSiECeEaEYN2cxaBVT+6zgp+Tp0TbGVqGMIB034BLaVdNZZPnqKFH4As8UCAwEAAQ==
     -----END PUBLIC KEY-----'''
@@ -79,14 +78,15 @@ def fetch_data(cno):
     headers = {
         'Content-Type': 'application/json, text/plain, */*',
         'Param': base64_encoded_body
-    }   
-    response = requests.get(api_url, headers=headers)
+    }
 
-    if response.status_code == 200:
-        data = response.json()
-        return data["dataResult"]
-    else:
-        raise Exception(f"API request failed with status code {response.status_code}")
+    async with aiohttp.ClientSession() as session:
+        async with session.get(api_url, headers=headers) as response:
+            if response.status == 200:
+                data = await response.json()
+                return data["dataResult"]
+            else:
+                raise Exception(f"API request failed with status code {response.status}")
 
 class HuaRunRQSensor(CoordinatorEntity, SensorEntity):
     """Representation of a HuaRunRQ Sensor."""
