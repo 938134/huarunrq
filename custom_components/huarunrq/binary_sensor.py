@@ -1,4 +1,7 @@
+"""Binary sensor platform for HuaRunRQ."""
 from homeassistant.components.binary_sensor import BinarySensorEntity
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.helpers.entity import DeviceInfo
 from .const import *
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -9,7 +12,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
         entities.append(ArrearsSensor(coord, cno, device))
     async_add_entities(entities)
 
-class ArrearsSensor(BinarySensorEntity):
+
+class ArrearsSensor(CoordinatorEntity, BinarySensorEntity):
     def __init__(self, coordinator, cno, device):
         super().__init__(coordinator)
         self.cno = cno
