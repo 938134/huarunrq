@@ -42,10 +42,40 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     
     sensors = []
     for cno in cns:
-        # 暂时只创建余额传感器，用气量传感器需要额外认证
+        # 为每个户号创建余额传感器和用气量传感器
         sensors.append(HuaRunRQBalanceSensor(f"华润燃气 {cno} 余额", cno))
+        sensors.append(HuaRunRQGasUsageSensor(f"华润燃气 {cno} 用气量", cno))
     
     async_add_entities(sensors, True)
+
+def generate_encrypted_params():
+    """生成加密的请求参数"""
+    public_key_pem = '''-----BEGIN PUBLIC KEY-----
+MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAIi4Gb8iOGcc05iqNilFb1gM6/iG4fSiECeEaEYN2cxaBVT+6zgp+Tp0TbGVqGMIB034BLaVdNZZPnqKFH4As8UCAwEAAQ==
+-----END PUBLIC KEY-----'''
+
+    public_key = serialization.load_pem_public_key(
+        public_key_pem.encode('utf-8'),
+        backend=default_backend()
+    )
+
+    data_to_encrypt = 'e5b871c278a84defa8817d22afc34338#' + str(int(time.time() * 1000)) + '#' + str(random.randint(1000, 9999))
+
+    encrypted_data = public_key.encrypt(
+        data_to_encrypt.encode('utf-8'),
+        padding.PKCS1v15()
+    )
+
+    base64_encrypted_data = base64.urlsafe_b64encode(encrypted_data).decode('utf-8')
+
+    request_body = {
+        'USER': 'bizH5',
+        'PWD': base64_encrypted_data
+    }
+
+    base64_encoded_body = base64.urlsafe_b64encode(json.dumps(request_body).encode('utf-8')).decode('utf-8')
+
+    return base64_encoded_body
 
 class HuaRunRQBalanceSensor(SensorEntity):
     """Representation of a Balance Sensor."""
@@ -98,54 +128,112 @@ class HuaRunRQBalanceSensor(SensorEntity):
                 "最近充值金额": data.get("lastChargeAmt"),
                 "最近充值时间": data.get("lastChargeTime")
             }
-            _LOGGER.info(f"Successfully updated balance data for {self._cno}: 余额={self._state}")
+            _LOGGER.info(f"成功更新余额数据 {self._cno}: 余额={self._state}")
         except Exception as e:
-            _LOGGER.error("Error fetching balance data: %s", e)
+            _LOGGER.error("获取余额数据错误: %s", e)
             self._state = None
             self._attributes = {}
 
     def get_arrears_data(self):
         """Get the arrears data from the API."""
-        public_key_pem = '''-----BEGIN PUBLIC KEY-----
-MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAIi4Gb8iOGcc05iqNilFb1gM6/iG4fSiECeEaEYN2cxaBVT+6zgp+Tp0TbGVqGMIB034BLaVdNZZPnqKFH4As8UCAwEAAQ==
------END PUBLIC KEY-----'''
+        base64_encoded_body = generate_encrypted_params()
 
-        public_key = serialization.load_pem_public_key(
-            public_key_pem.encode('utf-8'),
-            backend=default_backend()
-        )
-
-        data_to_encrypt = 'e5b871c278a84defa8817d22afc34338#' + str(int(time.time() * 1000)) + '#' + str(random.randint(1000, 9999))
-
-        encrypted_data = public_key.encrypt(
-            data_to_encrypt.encode('utf-8'),
-            padding.PKCS1v15()
-        )
-
-        base64_encrypted_data = base64.urlsafe_b64encode(encrypted_data).decode('utf-8')
-
-        request_body = {
-            'USER': 'bizH5',
-            'PWD': base64_encrypted_data
-        }
-
-        base64_encoded_body = base64.urlsafe_b64encode(json.dumps(request_body).encode('utf-8')).decode('utf-8')
-
-        # 使用正确的API URL - 包含 /api/h5 路径和 authVersion 参数
-        api_url = 'https://mbhapp.crcgas.com/bizonline/api/h5/pay/queryArrears?authVersion=v2&consNo=' + self._cno
+        # 使用正确的余额查询接口（包含认证参数）
+        api_url = f'https://mbhapp.crcgas.com/bizonline/api/h5/pay/queryArrears?authVersion=v2&consNo={self._cno}'
         headers = {
             'Content-Type': 'application/json, text/plain, */*',
             'Param': base64_encoded_body
-        }   
-        
-        _LOGGER.debug(f"Request URL: {api_url}")
+        }
         
         response = requests.get(api_url, headers=headers)
         
-        _LOGGER.debug(f"Response status: {response.status_code}")
-
         if response.status_code == 200:
             data = response.json()
             return data["dataResult"]
         else:
-            raise Exception(f"API request failed with status code {response.status_code}: {response.text}")
+            raise Exception(f"API请求失败，状态码: {response.status_code}")
+
+
+class HuaRunRQGasUsageSensor(SensorEntity):
+    """Representation of a Gas Usage Sensor."""
+
+    def __init__(self, name, cno):
+        """Initialize the sensor."""
+        self._state = None
+        self._name = name
+        self._cno = cno
+        self._attributes = {}
+        self._attr_unique_id = f"huarunrq_{cno}_gas_usage"
+        self._attr_icon = "mdi:fire"
+        self._attr_unit_of_measurement = "m³"
+
+    @property
+    def name(self):
+        """Return the name of the sensor."""
+        return self._name
+
+    @property
+    def state(self):
+        """Return the state of the sensor."""
+        return self._state
+
+    @property
+    def extra_state_attributes(self):
+        """Return the state attributes of the sensor."""
+        return self._attributes
+
+    @property
+    def device_info(self):
+        """Return device information about this entity."""
+        return DeviceInfo(
+            identifiers={("huarunrq", self._cno)},
+            name=f"华润燃气 {self._cno}",
+            manufacturer="华润燃气",
+            model="燃气用户",
+            entry_type=DeviceEntryType.SERVICE,
+        )
+
+    def update(self):
+        """Fetch new state data for the sensor."""
+        try:
+            # 获取用气量数据
+            data = self.get_bill_data()
+            if data and "list" in data and data["list"]:
+                latest_bill = data["list"][0]  # 获取最新账单
+                self._state = latest_bill.get("gasVolume")
+                self._attributes = {
+                    "户号": self._cno,
+                    "账单月份": latest_bill.get("billYm"),
+                    "账单金额": latest_bill.get("billAmt"),
+                    "账单状态": latest_bill.get("billStatus"),
+                    "申请单号": latest_bill.get("applicationNo")
+                }
+                _LOGGER.info(f"成功更新用气量数据 {self._cno}: 用气量={self._state}m³")
+            else:
+                _LOGGER.warning(f"无账单数据 {self._cno}")
+                self._state = None
+                self._attributes = {"户号": self._cno, "状态": "无数据"}
+                
+        except Exception as e:
+            _LOGGER.error("获取用气量数据错误: %s", e)
+            self._state = None
+            self._attributes = {}
+
+    def get_bill_data(self):
+        """Get the bill data from the API."""
+        base64_encoded_body = generate_encrypted_params()
+
+        # 用气量API（可能需要额外认证，先试试同样的方式）
+        api_url = f'https://mbhapp.crcgas.com/bizonline/gasbill/getGasBillList4Chart?consNo={self._cno}&page=1&pageNum=6'
+        headers = {
+            'Content-Type': 'application/json, text/plain, */*',
+            'Param': base64_encoded_body
+        }
+        
+        response = requests.get(api_url, headers=headers)
+        
+        if response.status_code == 200:
+            data = response.json()
+            return data["dataResult"]
+        else:
+            raise Exception(f"API请求失败，状态码: {response.status_code}")
