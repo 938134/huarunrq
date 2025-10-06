@@ -1,11 +1,10 @@
-# custom_components/huarunrq/const.py
-import voluptuous as vol
-
 DOMAIN = "huarunrq"
-DATA_SCHEMA = vol.Schema({
-    vol.Required("cno"): str,
-    vol.Optional("scan_interval", default=3600): int
-})
+CONF_CNO_LIST = "cno_list"          # 逗号分隔
+CONF_SCAN_INTERVAL = "scan_interval"
+DEFAULT_SCAN_INTERVAL = 3600
 
-API_URL = "https://mbhapp.crcgas.com/bizonline/api/h5/pay/queryArrears?authVersion=v2&consNo={cno}"
-MANUFACTURER = "华润燃气"
+BIZ_H5_PUBLIC_KEY_PEM = """\
+-----BEGIN PUBLIC KEY-----
+MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAIi4Gb8iOGcc05iqNilFb1gM6/iG4fSi
+ECeEaEYN2cxaBVT+6zgp+Tp0TbGVqGMIB034BLaVdNZZPnqKFH4As8UCAwEAAQ==
+-----END PUBLIC KEY-----"""

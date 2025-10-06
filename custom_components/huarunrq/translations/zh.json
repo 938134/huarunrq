@@ -1,0 +1,28 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "添加华润燃气户号",
+        "description": "支持多户，用英文逗号分隔，例如：1032246196,1032246197",
+        "data": {
+          "cno_list": "户号列表",
+          "scan_interval": "刷新间隔(秒)"
+        }
+      }
+    },
+    "error": {
+      "invalid_cno": "户号格式错误，应为 10-12 位数字，多个用逗号分隔"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "调整户号或间隔",
+        "data": {
+          "cno_list": "户号列表",
+          "scan_interval": "刷新间隔(秒)"
+        }
+      }
+    }
+  }
+}
