@@ -49,7 +49,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     async_add_entities(sensors, True)
 
 def generate_encrypted_params():
-    """生成加密的请求参数"""
+    """生成加密的请求参数 - 使用原来的固定格式"""
     # 固定的公钥
     public_key_pem = '''-----BEGIN PUBLIC KEY-----
 MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAIi4Gb8iOGcc05iqNilFb1gM6/iG4fSiECeEaEYN2cxaBVT+6zgp+Tp0TbGVqGMIB034BLaVdNZZPnqKFH4As8UCAwEAAQ==
@@ -60,12 +60,8 @@ MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAIi4Gb8iOGcc05iqNilFb1gM6/iG4fSiECeEaEYN2cxaBVT+
         backend=default_backend()
     )
 
-    # 生成随机的加密数据
-    random_salt = ''.join(random.choices('abcdefghijklmnopqrstuvwxyz0123456789', k=16))
-    timestamp = str(int(time.time() * 1000))
-    random_num = str(random.randint(1000, 9999))
-    
-    data_to_encrypt = f'{random_salt}#{timestamp}#{random_num}'
+    # 使用原来的固定格式，只随机化时间戳和随机数部分
+    data_to_encrypt = 'e5b871c278a84defa8817d22afc34338#' + str(int(time.time() * 1000)) + '#' + str(random.randint(1000, 9999))
 
     encrypted_data = public_key.encrypt(
         data_to_encrypt.encode('utf-8'),
@@ -85,34 +81,48 @@ MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAIi4Gb8iOGcc05iqNilFb1gM6/iG4fSiECeEaEYN2cxaBVT+
 
 def make_api_request(api_url):
     """通用的API请求方法"""
+    encrypted_params = generate_encrypted_params()
+    
+    headers = {
+        'Content-Type': 'application/json, text/plain, */*',
+        'Param': encrypted_params
+    }
+    
+    _LOGGER.debug(f"API Request URL: {api_url}")
+    _LOGGER.debug(f"Encrypted Params: {encrypted_params}")
+    
     try:
-        encrypted_params = generate_encrypted_params()
-        
-        headers = {
-            'Content-Type': 'application/json, text/plain, */*',
-            'Param': encrypted_params
-        }
-        
-        _LOGGER.debug(f"API Request URL: {api_url}")
-        
-        response = requests.get(api_url, headers=headers, timeout=30)
+        response = requests.get(api_url, headers=headers, timeout=10)
         
         _LOGGER.debug(f"API Response status: {response.status_code}")
+        _LOGGER.debug(f"API Response headers: {dict(response.headers)}")
 
         if response.status_code != 200:
-            raise Exception(f"API request failed with status code {response.status_code}")
+            # 记录详细的错误信息
+            error_detail = f"Status: {response.status_code}, Response: {response.text}"
+            _LOGGER.error(f"API request failed: {error_detail}")
+            raise Exception(f"API request failed: {error_detail}")
 
         data = response.json()
+        _LOGGER.debug(f"API Response data: {data}")
         return data.get("dataResult", {})
         
     except requests.exceptions.Timeout:
-        raise Exception("API request timeout")
+        error_msg = "API request timeout"
+        _LOGGER.error(error_msg)
+        raise Exception(error_msg)
     except requests.exceptions.ConnectionError:
-        raise Exception("API connection error")
-    except json.JSONDecodeError:
-        raise Exception("API response JSON decode error")
+        error_msg = "API connection error"
+        _LOGGER.error(error_msg)
+        raise Exception(error_msg)
+    except json.JSONDecodeError as e:
+        error_msg = f"API response JSON decode error: {e}"
+        _LOGGER.error(error_msg)
+        raise Exception(error_msg)
     except Exception as e:
-        raise Exception(f"API request error: {e}")
+        error_msg = f"API request error: {str(e)}"
+        _LOGGER.error(error_msg)
+        raise Exception(error_msg)
 
 class HuaRunRQBalanceSensor(SensorEntity):
     """Representation of a Balance Sensor."""
@@ -167,11 +177,11 @@ class HuaRunRQBalanceSensor(SensorEntity):
                 "最近充值金额": data.get("lastChargeAmt"),
                 "最近充值时间": data.get("lastChargeTime")
             }
-            _LOGGER.info(f"Successfully updated balance data for {self._cno}")
+            _LOGGER.info(f"Successfully updated balance data for {self._cno}: {self._state}")
         except Exception as e:
             _LOGGER.error("Error fetching balance data: %s", e)
             self._state = None
-            self._attributes = {}
+            self._attributes = {"错误": str(e)}
 
 
 class HuaRunRQGasUsageSensor(SensorEntity):
@@ -230,7 +240,7 @@ class HuaRunRQGasUsageSensor(SensorEntity):
                     "账单状态": latest_bill.get("billStatus"),
                     "申请单号": latest_bill.get("applicationNo")
                 }
-                _LOGGER.info(f"Successfully updated gas usage data for {self._cno}")
+                _LOGGER.info(f"Successfully updated gas usage data for {self._cno}: {self._state}")
             else:
                 _LOGGER.warning(f"No bill data received for {self._cno}")
                 self._state = None
@@ -239,4 +249,4 @@ class HuaRunRQGasUsageSensor(SensorEntity):
         except Exception as e:
             _LOGGER.error("Error fetching gas usage data: %s", e)
             self._state = None
-            self._attributes = {}
+            self._attributes = {"错误": str(e)}
