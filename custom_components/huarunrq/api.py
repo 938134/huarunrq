@@ -22,11 +22,10 @@ class HuaRunRQAPI:
         if self.session is None:
             self.session = aiohttp.ClientSession()
     
-    async def _make_request(self, url):
-        """Make API request with encrypted authentication."""
+    async def _fetch_data(self, url):
+        """使用原来的加密逻辑获取数据"""
         await self._ensure_session()
         
-        # 加密认证数据
         public_key = serialization.load_pem_public_key(
             PUBLIC_KEY.encode('utf-8'),
             backend=default_backend()
@@ -51,7 +50,7 @@ class HuaRunRQAPI:
         headers = {
             'Content-Type': 'application/json, text/plain, */*',
             'Param': base64_encoded_body,
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36 NetType/WIFI MicroMessenger/7.0.20.1781(0x6700143B) WindowsWechat(0x63090a13) UnifiedPCWindowsWechat(0xf2541022) XWEB/16467 Flue'
         }
 
         try:
@@ -67,12 +66,12 @@ class HuaRunRQAPI:
     async def async_get_arrears(self, cno):
         """Get arrears and balance information."""
         url = API_QUERY_ARREARS.format(cno=cno)
-        return await self._make_request(url)
+        return await self._fetch_data(url)
     
     async def async_get_bill_list(self, cno):
         """Get gas bill list with usage information."""
         url = API_GAS_BILL_LIST.format(cno=cno)
-        return await self._make_request(url)
+        return await self._fetch_data(url)
     
     async def close(self):
         """Close the session."""
