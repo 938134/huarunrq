@@ -1,180 +1,73 @@
-"""Sensor platform for HuaRunRQ —— 零 bo-token，Param 签名即可。"""
-import asyncio, base64, json, random, time, logging
-from datetime import timedelta
-import aiohttp
-from cryptography.hazmat.primitives import serialization, padding
-from cryptography.hazmat.backends import default_backend
-
+"""Platform for sensor integration."""
 from homeassistant.components.sensor import SensorEntity
-from homeassistant.helpers.update_coordinator import CoordinatorEntity, UpdateFailed
 from homeassistant.helpers.entity import DeviceInfo
-from .const import *
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .const import DOMAIN, MANUFACTURER, SENSOR_TYPES
 
-# ---------- 加密工具 ----------
-def _encrypt_param() -> str:
-    pem = BIZ_H5_PUBLIC_KEY_PEM
-    public_key = serialization.load_pem_public_key(pem.encode(), backend=default_backend())
-    plain = f"e5b871c278a84defa8817d22afc34338#{int(time.time() * 1000)}#{random.randint(1000, 9999)}"
-    encrypted = public_key.encrypt(plain.encode(), padding.PKCS1v15())
-    return base64.urlsafe_b64encode(encrypted).decode()
-
-
-# ---------- 异步获取一户数据 ----------
-async def fetch_data(cno: str) -> dict:
-    loop = asyncio.get_running_loop()
-    param = await loop.run_in_executor(None, _encrypt_param)
-    body = {"USER": "bizH5", "PWD": param}
-    b64_body = base64.urlsafe_b64encode(json.dumps(body).encode()).decode()
-
-    url = API_ARREARS.format(cno=cno)
-    headers = {
-        "Content-Type": "application/json, text/plain, */*",
-        "Param": b64_body,
-    }
-
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url, headers=headers) as resp:
-            resp.raise_for_status()
-            data = await resp.json()
-            if data.get("dataResult") is None:
-                raise UpdateFailed("dataResult 为空")
-            return data["dataResult"]
-
-
-# ---------- Coordinator ----------
-class HuaRunRQCoordinator(DataUpdateCoordinator):
-    def __init__(self, hass, cnos: list[str], scan: int):
-        super().__init__(hass, _LOGGER, name=DOMAIN, update_interval=timedelta(seconds=scan))
-        self.cnos = cnos
-        self._session = aiohttp.ClientSession()
-
-    async def _async_update_data(self):
-        tasks = [fetch_data(cno) for cno in self.cnos]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        return {cno: (res if not isinstance(res, Exception) else None) for cno, res in zip(self.cnos, results)}
-
-
-# ---------- 平台入口（动态设备工厂） ----------
-async def async_setup_entry(hass, entry, async_add_entities):
-    """每户号 1 设备 + 完整传感器套件"""
-    coord = hass.data[DOMAIN][entry.entry_id]
+async def async_setup_entry(hass, config_entry, async_add_entities):
+    """Set up HuaRunRQ sensors based on a config entry."""
+    coordinators = hass.data[DOMAIN][config_entry.entry_id]
     entities = []
-    for cno in coord.cnos:
-        device = DeviceInfo(identifiers={(DOMAIN, cno)}, name=f"华润燃气 {cno}", manufacturer="华润燃气")
-        entities.extend([
-            BalanceSensor(coord, cno, device),
-            LatestGasSensor(coord, cno, device),
-            LatestMoneySensor(coord, cno, device),
-            CurrentStepSensor(coord, cno, device),
-            YearTotalSensor(coord, cno, device),
-            InvoiceNoSensor(coord, cno, device),
-        ])
-    async_add_entities(entities)
+    
+    for cno, coordinator in coordinators.items():
+        # 为每个户号创建所有传感器类型
+        for sensor_type in SENSOR_TYPES:
+            entities.append(
+                HuaRunRQSensor(coordinator, cno, sensor_type)
+            )
+    
+    async_add_entities(entities, True)
 
+class HuaRunRQSensor(CoordinatorEntity, SensorEntity):
+    """Representation of a HuaRunRQ Sensor."""
 
-# ---------- 传感器类 ----------
-class BalanceSensor(CoordinatorEntity, SensorEntity):
-    def __init__(self, coordinator, cno, device):
+    def __init__(self, coordinator, cno, sensor_type):
+        """Initialize the sensor."""
         super().__init__(coordinator)
-        self.cno = cno
-        self._attr_device_info = device
-        self._attr_unique_id = f"{cno}_balance"
-        self._attr_name = f"{cno} 账户余额"
-        self._attr_unit_of_measurement = "元"
-        self._attr_icon = "mdi:currency-cny"
+        self._cno = cno
+        self._sensor_type = sensor_type
+        self._attr_name = f"华润燃气 {cno} {SENSOR_TYPES[sensor_type][0]}"
+        self._attr_unique_id = f"{DOMAIN}_{cno}_{sensor_type}"
+        self._attr_icon = SENSOR_TYPES[sensor_type][2]
+        self._attr_unit_of_measurement = SENSOR_TYPES[sensor_type][1]
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, cno)},
+            name=f"华润燃气 {cno}",
+            manufacturer=MANUFACTURER,
+            model="燃气用户",
+        )
 
     @property
-    def native_value(self):
-        data = self.coordinator.data.get(self.cno)
-        return -data.get("arrearsMoney", 0) if data else None
-
-
-class LatestGasSensor(CoordinatorEntity, SensorEntity):
-    def __init__(self, coordinator, cno, device):
-        super().__init__(coordinator)
-        self.cno = cno
-        self._attr_device_info = device
-        self._attr_unique_id = f"{cno}_latest_gas"
-        self._attr_name = f"{cno} 最新用气量"
-        self._attr_unit_of_measurement = "m³"
-        self._attr_icon = "mdi:fire"
-
-    @property
-    def native_value(self):
-        data = self.coordinator.data.get(self.cno)
-        return data.get("totalGasNum") or data.get("gasNum") or None
-
-    @property
-    def extra_state_attributes(self):
-        data = self.coordinator.data.get(self.cno)
-        return {"records": data.get("bills", [])} if data else {}
-
-
-class LatestMoneySensor(CoordinatorEntity, SensorEntity):
-    def __init__(self, coordinator, cno, device):
-        super().__init__(coordinator)
-        self.cno = cno
-        self._attr_device_info = device
-        self._attr_unique_id = f"{cno}_latest_money"
-        self._attr_name = f"{cno} 最新金额"
-        self._attr_unit_of_measurement = "元"
-        self._attr_icon = "mdi:cash"
-
-    @property
-    def native_value(self):
-        data = self.coordinator.data.get(self.cno)
-        return data.get("money") if data else None
-
-
-class CurrentStepSensor(CoordinatorEntity, SensorEntity):
-    def __init__(self, coordinator, cno, device):
-        super().__init__(coordinator)
-        self.cno = cno
-        self._attr_device_info = device
-        self._attr_unique_id = f"{cno}_current_step"
-        self._attr_name = f"{cno} 当前阶梯"
-        self._attr_icon = "mdi:stairs"
-
-    @property
-    def native_value(self):
-        data = self.coordinator.data.get(self.cno)
-        return data.get("step") if data else None
-
-    @property
-    def extra_state_attributes(self):
-        data = self.coordinator.data.get(self.cno)
-        return {"stepDetail": data.get("stepDetail", [])} if data else {}
-
-
-class YearTotalSensor(CoordinatorEntity, SensorEntity):
-    def __init__(self, coordinator, cno, device):
-        super().__init__(coordinator)
-        self.cno = cno
-        self._attr_device_info = device
-        self._attr_unique_id = f"{cno}_year_total"
-        self._attr_name = f"{cno} 年度累计用气"
-        self._attr_unit_of_measurement = "m³"
-        self._attr_icon = "mdi:chart-line"
-
-    @property
-    def native_value(self):
-        data = self.coordinator.data.get(self.cno)
-        if not data or not data.get("bills"):
+    def state(self):
+        """Return the state of the sensor."""
+        if not self.coordinator.data:
             return None
-        return round(sum(b["gasNum"] for b in data["bills"]), 2)
-
-
-class InvoiceNoSensor(CoordinatorEntity, SensorEntity):
-    def __init__(self, coordinator, cno, device):
-        super().__init__(coordinator)
-        self.cno = cno
-        self._attr_device_info = device
-        self._attr_unique_id = f"{cno}_invoice_no"
-        self._attr_name = f"{cno} 发票号"
-        self._attr_icon = "mdi:file-document-check"
+            
+        data = self.coordinator.data
+        
+        if self._sensor_type == "balance":
+            return data.get("totalGasBalance")
+        elif self._sensor_type == "gas_usage":
+            # 返回最新月份的用气量
+            return data.get("current_gas_usage")
+        
+        return None
 
     @property
-    def native_value(self):
-        data = self.coordinator.data.get(self.cno)
-        return data.get("invoiceNo") if data else None
+    def extra_state_attributes(self):
+        """Return additional state attributes."""
+        if not self.coordinator.data:
+            return {}
+            
+        attrs = {"户号": self._cno}
+        data = self.coordinator.data
+        
+        if self._sensor_type == "gas_usage":
+            attrs.update({
+                "账单月份": data.get("current_bill_month"),
+                "账单金额": data.get("current_bill_amount"),
+                "账单状态": data.get("current_bill_status")
+            })
+            
+        return attrs

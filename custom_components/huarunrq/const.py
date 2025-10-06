@@ -1,20 +1,20 @@
-# custom_components/huarunrq/const.py
-import logging
-from datetime import timedelta
-
+"""Constants for HuaRunRQ integration."""
 DOMAIN = "huarunrq"
-CONF_CNO_LIST = "cno_list"
+MANUFACTURER = "华润燃气"
+
+CONF_CNS = "cns"
 CONF_SCAN_INTERVAL = "scan_interval"
-DEFAULT_SCAN_INTERVAL = 3600
 
-BASE_URL = "https://mbhapp.crcgas.com/bizonline"
-API_ARREARS = BASE_URL + "/pay/queryArrears?authVersion=v2&consNo={cno}"
-API_BILL_LIST = BASE_URL + "/gasbill/getGasBillList?page={page}&pageNum={pageNum}&consNo={cno}"
+API_BASE_URL = "https://mbhapp.crcgas.com/bizonline"
+API_QUERY_ARREARS = f"{API_BASE_URL}/api/h5/pay/queryArrears?authVersion=v2&consNo={{cno}}"
+API_GAS_BILL_LIST = f"{API_BASE_URL}/gasbill/getGasBillList4Chart?consNo={{cno}}&page=1&pageNum=6"
 
-BIZ_H5_PUBLIC_KEY_PEM = """\
------BEGIN PUBLIC KEY-----
+PUBLIC_KEY = """-----BEGIN PUBLIC KEY-----
 MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAIi4Gb8iOGcc05iqNilFb1gM6/iG4fSi
 ECeEaEYN2cxaBVT+6zgp+Tp0TbGVqGMIB034BLaVdNZZPnqKFH4As8UCAwEAAQ==
 -----END PUBLIC KEY-----"""
 
-_LOGGER = logging.getLogger(__name__)
+SENSOR_TYPES = {
+    "balance": ["燃气余额", "CNY", "mdi:cash"],
+    "gas_usage": ["本月用气量", "m³", "mdi:fire"],
+}

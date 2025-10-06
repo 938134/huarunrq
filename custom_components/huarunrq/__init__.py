@@ -1,21 +1,35 @@
 """HuaRunRQ integration."""
+import asyncio
+import logging
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from .const import *
 
-PLATFORMS = ["sensor", "binary_sensor"]
+from .const import DOMAIN, CONF_CNS
+from .coordinator import HuaRunRQDataUpdateCoordinator
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    from .coordinator import HuaRunRQCoordinator
-    cnos = entry.data[CONF_CNO_LIST]
-    scan = entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
-    coordinator = HuaRunRQCoordinator(hass, cnos, scan)
-    await coordinator.async_config_entry_first_refresh()
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+_LOGGER = logging.getLogger(__name__)
+
+async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry):
+    """Set up HuaRunRQ from a config entry."""
+    cns = config_entry.data[CONF_CNS]
+    
+    # 为每个户号创建协调器
+    coordinators = {}
+    for cno in cns:
+        coordinator = HuaRunRQDataUpdateCoordinator(hass, cno, config_entry)
+        await coordinator.async_config_entry_first_refresh()
+        coordinators[cno] = coordinator
+
+    hass.data.setdefault(DOMAIN, {})
+    hass.data[DOMAIN][config_entry.entry_id] = coordinators
+
+    # 设置传感器平台
+    await hass.config_entries.async_forward_entry_setups(config_entry, ["sensor"])
     return True
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    hass.data[DOMAIN].pop(entry.entry_id)
-    return True
+async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigEntry):
+    """Unload a config entry."""
+    unload_ok = await hass.config_entries.async_unload_platforms(config_entry, ["sensor"])
+    if unload_ok:
+        hass.data[DOMAIN].pop(config_entry.entry_id)
+    return unload_ok

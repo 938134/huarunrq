@@ -1,64 +1,64 @@
 """Config flow for HuaRunRQ integration."""
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.core import HomeAssistant, callback
-from homeassistant.data_entry_flow import FlowResult
-from .const import *
+from homeassistant.core import callback
 
-def validate_cnolist(value: str) -> list[str]:
-    cnos = [c.strip() for c in value.split(",") if c.strip().isdigit() and 10 <= len(c.strip()) <= 12]
-    if not cnos:
-        raise vol.Invalid("至少输入一个 10-12 位数字户号，多个用英文逗号分隔")
-    return list(set(cnos))
+from .const import DOMAIN, CONF_CNS, CONF_SCAN_INTERVAL
 
+class HuaRunRQFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
+    """Handle a config flow for HuaRunRQ."""
 
-class HuaRunRQConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     @staticmethod
     @callback
     def async_get_options_flow(config_entry):
+        """Get the options flow for this handler."""
         return HuaRunRQOptionsFlowHandler(config_entry)
 
     async def async_step_user(self, user_input=None):
+        """Handle the initial step."""
         errors = {}
         if user_input is not None:
-            try:
-                cnos = validate_cnolist(user_input[CONF_CNO_LIST])
-                await self.async_set_unique_id(",".join(sorted(cnos)))
-                self._abort_if_unique_id_configured()
+            # 验证户号格式（支持逗号分隔的多个户号）
+            cns = [cno.strip() for cno in user_input[CONF_CNS].split(",") if cno.strip()]
+            if not cns:
+                errors[CONF_CNS] = "至少需要一个有效的户号"
+            else:
+                # 创建配置条目
                 return self.async_create_entry(
-                    title=f"华润燃气 {len(cnos)} 户",
-                    data={CONF_CNO_LIST: cnos},
-                    options={CONF_SCAN_INTERVAL: user_input.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)},
+                    title=f"华润燃气({len(cns)}个户号)",
+                    data={CONF_CNS: cns},
+                    options={CONF_SCAN_INTERVAL: user_input.get(CONF_SCAN_INTERVAL, 3600)}
                 )
-            except vol.Invalid as e:
-                errors["base"] = str(e)
 
-        schema = vol.Schema({
-            vol.Required(CONF_CNO_LIST): str,
-            vol.Optional(CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL): int,
-        })
-        return self.async_show_form(step_id="user", data_schema=schema, errors=errors)
-
+        # 显示表单
+        return self.async_show_form(
+            step_id="user",
+            data_schema=vol.Schema({
+                vol.Required(CONF_CNS, description="多个户号用逗号分隔"): str,
+                vol.Optional(CONF_SCAN_INTERVAL, default=3600): int
+            }),
+            errors=errors
+        )
 
 class HuaRunRQOptionsFlowHandler(config_entries.OptionsFlow):
+    """Handle options flow for HuaRunRQ integration."""
+
     def __init__(self, config_entry):
+        """Initialize HuaRunRQ options flow."""
         self.config_entry = config_entry
 
     async def async_step_init(self, user_input=None):
+        """Manage the options."""
         if user_input is not None:
-            cnos = validate_cnolist(user_input[CONF_CNO_LIST])
-            self.hass.config_entries.async_update_entry(
-                self.config_entry,
-                data={CONF_CNO_LIST: cnos},
-                options={CONF_SCAN_INTERVAL: user_input.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)},
-            )
-            return self.async_create_entry(title="", data={})
+            return self.async_create_entry(title="", data=user_input)
 
-        current_cnolist = ",".join(self.config_entry.data[CONF_CNO_LIST])
-        schema = vol.Schema({
-            vol.Required(CONF_CNO_LIST, default=current_cnolist): str,
-            vol.Optional(CONF_SCAN_INTERVAL, default=self.config_entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)): int,
-        })
-        return self.async_show_form(step_id="init", data_schema=schema)
+        current_scan_interval = self.config_entry.options.get(CONF_SCAN_INTERVAL, 3600)
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema({
+                vol.Required(CONF_SCAN_INTERVAL, default=current_scan_interval): int
+            })
+        )

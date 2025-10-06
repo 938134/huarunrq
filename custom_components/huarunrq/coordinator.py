@@ -1,51 +1,52 @@
-"""DataUpdateCoordinator for HuaRunRQ."""
-import asyncio, aiohttp, base64, json, logging
+"""Data update coordinator for HuaRunRQ."""
+import asyncio
+import logging
 from datetime import timedelta
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
-from homeassistant.core import HomeAssistant
-from .const import *
+
+from .api import HuaRunRQAPI
+from .const import CONF_SCAN_INTERVAL
 
 _LOGGER = logging.getLogger(__name__)
 
+class HuaRunRQDataUpdateCoordinator(DataUpdateCoordinator):
+    """Class to manage fetching HuaRunRQ data."""
 
-def _encrypt_param() -> str:
-    """同步加密 Param"""
-    from cryptography.hazmat.primitives import serialization, padding
-    from cryptography.hazmat.backends import default_backend
-    pem = BIZ_H5_PUBLIC_KEY_PEM
-    public_key = serialization.load_pem_public_key(pem.encode(), backend=default_backend())
-    plain = f"e5b871c278a84defa8817d22afc34338#{int(time.time() * 1000)}#{__import__('random').randint(1000, 9999)}"
-    encrypted = public_key.encrypt(plain.encode(), padding.PKCS1v15())
-    return base64.urlsafe_b64encode(encrypted).decode()
-
-
-class HuaRunRQCoordinator(DataUpdateCoordinator):
-    def __init__(self, hass: HomeAssistant, cnos: list[str], scan: int):
-        super().__init__(hass, _LOGGER, name=DOMAIN, update_interval=timedelta(seconds=scan))
-        self.cnos = cnos
-        self._session = aiohttp.ClientSession()
+    def __init__(self, hass, cno, config_entry):
+        """Initialize global data updater."""
+        self.cno = cno
+        self.api = HuaRunRQAPI()
+        scan_interval = config_entry.options.get(CONF_SCAN_INTERVAL, 3600)
+        
+        super().__init__(
+            hass,
+            _LOGGER,
+            name=f"华润燃气 {cno}",
+            update_interval=timedelta(seconds=scan_interval),
+        )
 
     async def _async_update_data(self):
-        tasks = [self._fetch_one(cno) for cno in self.cnos]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        return {cno: (res if not isinstance(res, Exception) else None) for cno, res in zip(self.cnos, results)}
-
-    async def _fetch_one(self, cno: str):
-        loop = asyncio.get_running_loop()
-        param = await loop.run_in_executor(None, _encrypt_param)
-        body = {"USER": "bizH5", "PWD": param}
-        b64_body = base64.urlsafe_b64encode(json.dumps(body).encode()).decode()
-
-        url = API_ARREARS.format(cno=cno)
-        headers = {
-            "Content-Type": "application/json, text/plain, */*",
-            "Param": b64_body,
-            "Cookie": "HWWAFSESID=dummy",   # 空 Cookie 即可
-        }
-
-        async with self._session.get(url, headers=headers) as resp:
-            resp.raise_for_status()
-            data = await resp.json()
-            if data.get("dataResult") is None:
-                raise UpdateFailed("dataResult 为空")
-            return data["dataResult"]
+        """Fetch data from API."""
+        try:
+            data = {}
+            
+            # 获取余额信息
+            arrears_data = await self.api.async_get_arrears(self.cno)
+            if arrears_data:
+                data.update(arrears_data)
+            
+            # 获取账单列表，提取最新月份用气量
+            bill_data = await self.api.async_get_bill_list(self.cno)
+            if bill_data and "list" in bill_data and bill_data["list"]:
+                latest_bill = bill_data["list"][0]  # 最新账单
+                data.update({
+                    "current_gas_usage": latest_bill.get("gasVolume"),
+                    "current_bill_month": latest_bill.get("billYm"),
+                    "current_bill_amount": latest_bill.get("billAmt"),
+                    "current_bill_status": latest_bill.get("billStatus")
+                })
+            
+            return data
+            
+        except Exception as err:
+            raise UpdateFailed(f"Error communicating with API: {err}") from err
