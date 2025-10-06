@@ -17,56 +17,44 @@ from .const import CONF_SCAN_INTERVAL, API_QUERY_ARREARS, API_GAS_BILL_LIST
 _LOGGER = logging.getLogger(__name__)
 
 async def fetch_data(cno, api_url):
-    """使用原来的加密逻辑获取数据"""
-    try:
-        # 修正公钥格式
-        public_key_pem = '''-----BEGIN PUBLIC KEY-----
-MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAIi4Gb8iOGcc05iqNilFb1gM6/iG4fSiECeEaEYN2cxaBVT+6zgp+Tp0TbGVqGMIB034BLaVdNZZPnqKFH4As8UCAwEAAQ==
------END PUBLIC KEY-----'''
+    """Fetch data from the API asynchronously."""
+    public_key_pem = '''-----BEGIN PUBLIC KEY-----
+    MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAIi4Gb8iOGcc05iqNilFb1gM6/iG4fSiECeEaEYN2cxaBVT+6zgp+Tp0TbGVqGMIB034BLaVdNZZPnqKFH4As8UCAwEAAQ==
+    -----END PUBLIC KEY-----'''
 
-        public_key = serialization.load_pem_public_key(
-            public_key_pem.encode('utf-8'),
-            backend=default_backend()
-        )
+    public_key = serialization.load_pem_public_key(
+        public_key_pem.encode('utf-8'),
+        backend=default_backend()
+    )
 
-        data_to_encrypt = 'e5b871c278a84defa8817d22afc34338#' + str(int(time.time() * 1000)) + '#' + str(random.randint(1000, 9999))
+    data_to_encrypt = 'e5b871c278a84defa8817d22afc34338#' + str(int(time.time() * 1000)) + '#' + str(random.randint(1000, 9999))
 
-        encrypted_data = public_key.encrypt(
-            data_to_encrypt.encode('utf-8'),
-            padding.PKCS1v15()
-        )
+    encrypted_data = public_key.encrypt(
+        data_to_encrypt.encode('utf-8'),
+        padding.PKCS1v15()
+    )
 
-        base64_encrypted_data = base64.urlsafe_b64encode(encrypted_data).decode('utf-8')
+    base64_encrypted_data = base64.urlsafe_b64encode(encrypted_data).decode('utf-8')
 
-        request_body = {
-            'USER': 'bizH5',
-            'PWD': base64_encrypted_data
-        }
+    request_body = {
+        'USER': 'bizH5',
+        'PWD': base64_encrypted_data
+    }
 
-        base64_encoded_body = base64.urlsafe_b64encode(json.dumps(request_body).encode('utf-8')).decode('utf-8')
+    base64_encoded_body = base64.urlsafe_b64encode(json.dumps(request_body).encode('utf-8')).decode('utf-8')
 
-        headers = {
-            'Content-Type': 'application/json, text/plain, */*',
-            'Param': base64_encoded_body
-        }
+    headers = {
+        'Content-Type': 'application/json, text/plain, */*',
+        'Param': base64_encoded_body
+    }
 
-        _LOGGER.debug(f"Request URL: {api_url}")
-        _LOGGER.debug(f"Request headers: {headers}")
-
-        async with aiohttp.ClientSession() as session:
-            async with session.get(api_url, headers=headers) as response:
-                _LOGGER.debug(f"Response status: {response.status}")
-                if response.status == 200:
-                    data = await response.json()
-                    _LOGGER.debug(f"Response data: {data}")
-                    return data.get("dataResult", {})
-                else:
-                    response_text = await response.text()
-                    _LOGGER.error(f"API request failed with status {response.status}: {response_text}")
-                    raise Exception(f"API request failed with status code {response.status}")
-    except Exception as e:
-        _LOGGER.error(f"Request error: {e}")
-        raise Exception(f"Request error: {e}")
+    async with aiohttp.ClientSession() as session:
+        async with session.get(api_url, headers=headers) as response:
+            if response.status == 200:
+                data = await response.json()
+                return data["dataResult"]
+            else:
+                raise Exception(f"API request failed with status code {response.status}")
 
 class HuaRunRQDataUpdateCoordinator(DataUpdateCoordinator):
     """Class to manage fetching HuaRunRQ data."""
