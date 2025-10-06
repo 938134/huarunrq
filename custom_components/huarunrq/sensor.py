@@ -98,7 +98,7 @@ class HuaRunRQBalanceSensor(SensorEntity):
                 "最近充值金额": data.get("lastChargeAmt"),
                 "最近充值时间": data.get("lastChargeTime")
             }
-            _LOGGER.info(f"Successfully updated balance data for {self._cno}: {data}")
+            _LOGGER.info(f"Successfully updated balance data for {self._cno}: 余额={self._state}")
         except Exception as e:
             _LOGGER.error("Error fetching balance data: %s", e)
             self._state = None
@@ -131,19 +131,18 @@ MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAIi4Gb8iOGcc05iqNilFb1gM6/iG4fSiECeEaEYN2cxaBVT+
 
         base64_encoded_body = base64.urlsafe_b64encode(json.dumps(request_body).encode('utf-8')).decode('utf-8')
 
-        api_url = 'https://mbhapp.crcgas.com/bizonline/pay/queryArrears?consNo=' + self._cno
+        # 使用正确的API URL - 包含 /api/h5 路径和 authVersion 参数
+        api_url = 'https://mbhapp.crcgas.com/bizonline/api/h5/pay/queryArrears?authVersion=v2&consNo=' + self._cno
         headers = {
             'Content-Type': 'application/json, text/plain, */*',
             'Param': base64_encoded_body
         }   
         
         _LOGGER.debug(f"Request URL: {api_url}")
-        _LOGGER.debug(f"Encrypted Params: {base64_encoded_body}")
         
         response = requests.get(api_url, headers=headers)
         
         _LOGGER.debug(f"Response status: {response.status_code}")
-        _LOGGER.debug(f"Response content: {response.text}")
 
         if response.status_code == 200:
             data = response.json()
