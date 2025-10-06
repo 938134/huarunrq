@@ -42,41 +42,10 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     
     sensors = []
     for cno in cns:
-        # 为每个户号创建余额传感器和用气量传感器
+        # 暂时只创建余额传感器，用气量传感器需要额外认证
         sensors.append(HuaRunRQBalanceSensor(f"华润燃气 {cno} 余额", cno))
-        sensors.append(HuaRunRQGasUsageSensor(f"华润燃气 {cno} 用气量", cno))
     
     async_add_entities(sensors, True)
-
-def generate_encrypted_params():
-    """生成加密的请求参数 - 保持原来的逻辑"""
-    public_key_pem = '''-----BEGIN PUBLIC KEY-----
-MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAIi4Gb8iOGcc05iqNilFb1gM6/iG4fSiECeEaEYN2cxaBVT+6zgp+Tp0TbGVqGMIB034BLaVdNZZPnqKFH4As8UCAwEAAQ==
------END PUBLIC KEY-----'''
-
-    public_key = serialization.load_pem_public_key(
-        public_key_pem.encode('utf-8'),
-        backend=default_backend()
-    )
-
-    # 保持原来的固定格式
-    data_to_encrypt = 'e5b871c278a84defa8817d22afc34338#' + str(int(time.time() * 1000)) + '#' + str(random.randint(1000, 9999))
-
-    encrypted_data = public_key.encrypt(
-        data_to_encrypt.encode('utf-8'),
-        padding.PKCS1v15()
-    )
-
-    base64_encrypted_data = base64.urlsafe_b64encode(encrypted_data).decode('utf-8')
-
-    request_body = {
-        'USER': 'bizH5',
-        'PWD': base64_encrypted_data
-    }
-
-    base64_encoded_body = base64.urlsafe_b64encode(json.dumps(request_body).encode('utf-8')).decode('utf-8')
-
-    return base64_encoded_body
 
 class HuaRunRQBalanceSensor(SensorEntity):
     """Representation of a Balance Sensor."""
@@ -137,119 +106,47 @@ class HuaRunRQBalanceSensor(SensorEntity):
 
     def get_arrears_data(self):
         """Get the arrears data from the API."""
-        # 使用通用方法生成加密参数
-        base64_encoded_body = generate_encrypted_params()
+        public_key_pem = '''-----BEGIN PUBLIC KEY-----
+MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAIi4Gb8iOGcc05iqNilFb1gM6/iG4fSiECeEaEYN2cxaBVT+6zgp+Tp0TbGVqGMIB034BLaVdNZZPnqKFH4As8UCAwEAAQ==
+-----END PUBLIC KEY-----'''
 
-        # 使用正确的余额查询接口
-        api_url = 'https://mbhapp.crcgas.com/bizonline/pay/queryArrears?consNo=' + self._cno
-        
-        # 简化headers，只使用必要的参数
-        headers = {
-            'Content-Type': 'application/json, text/plain, */*',
-            'Param': base64_encoded_body
-        }
-        
-        _LOGGER.debug(f"Balance Request URL: {api_url}")
-        
-        response = requests.get(api_url, headers=headers)
-        
-        _LOGGER.debug(f"Balance Response status: {response.status_code}")
-
-        if response.status_code != 200:
-            raise Exception(f"Balance API request failed with status code {response.status_code}")
-
-        data = response.json()
-        return data["dataResult"]
-
-
-class HuaRunRQGasUsageSensor(SensorEntity):
-    """Representation of a Gas Usage Sensor."""
-
-    def __init__(self, name, cno):
-        """Initialize the sensor."""
-        self._state = None
-        self._name = name
-        self._cno = cno
-        self._attributes = {}
-        self._attr_unique_id = f"huarunrq_{cno}_gas_usage"
-        self._attr_icon = "mdi:fire"
-        self._attr_unit_of_measurement = "m³"
-
-    @property
-    def name(self):
-        """Return the name of the sensor."""
-        return self._name
-
-    @property
-    def state(self):
-        """Return the state of the sensor."""
-        return self._state
-
-    @property
-    def extra_state_attributes(self):
-        """Return the state attributes of the sensor."""
-        return self._attributes
-
-    @property
-    def device_info(self):
-        """Return device information about this entity."""
-        return DeviceInfo(
-            identifiers={("huarunrq", self._cno)},
-            name=f"华润燃气 {self._cno}",
-            manufacturer="华润燃气",
-            model="燃气用户",
-            entry_type=DeviceEntryType.SERVICE,
+        public_key = serialization.load_pem_public_key(
+            public_key_pem.encode('utf-8'),
+            backend=default_backend()
         )
 
-    def update(self):
-        """Fetch new state data for the sensor."""
-        try:
-            # 获取用气量数据
-            data = self.get_bill_data()
-            if data and "list" in data and data["list"]:
-                latest_bill = data["list"][0]  # 获取最新账单
-                self._state = latest_bill.get("gasVolume")
-                self._attributes = {
-                    "户号": self._cno,
-                    "账单月份": latest_bill.get("billYm"),
-                    "账单金额": latest_bill.get("billAmt"),
-                    "账单状态": latest_bill.get("billStatus"),
-                    "申请单号": latest_bill.get("applicationNo")
-                }
-                _LOGGER.info(f"Successfully updated gas usage data for {self._cno}: {latest_bill}")
-            else:
-                _LOGGER.warning(f"No bill data received for {self._cno}")
-                self._state = None
-                self._attributes = {"户号": self._cno, "状态": "无数据"}
-                
-        except Exception as e:
-            _LOGGER.error("Error fetching gas usage data: %s", e)
-            self._state = None
-            self._attributes = {}
+        data_to_encrypt = 'e5b871c278a84defa8817d22afc34338#' + str(int(time.time() * 1000)) + '#' + str(random.randint(1000, 9999))
 
-    def get_bill_data(self):
-        """Get the bill data from the API."""
-        # 使用通用方法生成加密参数
-        base64_encoded_body = generate_encrypted_params()
+        encrypted_data = public_key.encrypt(
+            data_to_encrypt.encode('utf-8'),
+            padding.PKCS1v15()
+        )
 
-        # 使用正确的用气量API
-        api_url = f'https://mbhapp.crcgas.com/bizonline/gasbill/getGasBillList4Chart?consNo={self._cno}&page=1&pageNum=6'
-        
-        # 简化headers，只使用必要的参数（和余额查询保持一致）
+        base64_encrypted_data = base64.urlsafe_b64encode(encrypted_data).decode('utf-8')
+
+        request_body = {
+            'USER': 'bizH5',
+            'PWD': base64_encrypted_data
+        }
+
+        base64_encoded_body = base64.urlsafe_b64encode(json.dumps(request_body).encode('utf-8')).decode('utf-8')
+
+        api_url = 'https://mbhapp.crcgas.com/bizonline/pay/queryArrears?consNo=' + self._cno
         headers = {
             'Content-Type': 'application/json, text/plain, */*',
             'Param': base64_encoded_body
-        }
+        }   
         
-        _LOGGER.debug(f"Gas Usage Request URL: {api_url}")
+        _LOGGER.debug(f"Request URL: {api_url}")
+        _LOGGER.debug(f"Encrypted Params: {base64_encoded_body}")
         
         response = requests.get(api_url, headers=headers)
         
-        _LOGGER.debug(f"Gas Usage Response status: {response.status_code}")
-        _LOGGER.debug(f"Gas Usage Response content: {response.text}")
+        _LOGGER.debug(f"Response status: {response.status_code}")
+        _LOGGER.debug(f"Response content: {response.text}")
 
-        if response.status_code != 200:
-            raise Exception(f"Gas Usage API request failed with status code {response.status_code}")
-
-        data = response.json()
-        return data["dataResult"]
+        if response.status_code == 200:
+            data = response.json()
+            return data["dataResult"]
+        else:
+            raise Exception(f"API request failed with status code {response.status_code}: {response.text}")
