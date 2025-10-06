@@ -49,8 +49,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     async_add_entities(sensors, True)
 
 def generate_encrypted_params():
-    """生成加密的请求参数 - 使用原来的固定格式"""
-    # 固定的公钥
+    """生成加密的请求参数 - 保持原来的逻辑"""
     public_key_pem = '''-----BEGIN PUBLIC KEY-----
 MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAIi4Gb8iOGcc05iqNilFb1gM6/iG4fSiECeEaEYN2cxaBVT+6zgp+Tp0TbGVqGMIB034BLaVdNZZPnqKFH4As8UCAwEAAQ==
 -----END PUBLIC KEY-----'''
@@ -60,7 +59,7 @@ MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAIi4Gb8iOGcc05iqNilFb1gM6/iG4fSiECeEaEYN2cxaBVT+
         backend=default_backend()
     )
 
-    # 使用原来的固定格式，只随机化时间戳和随机数部分
+    # 保持原来的固定格式
     data_to_encrypt = 'e5b871c278a84defa8817d22afc34338#' + str(int(time.time() * 1000)) + '#' + str(random.randint(1000, 9999))
 
     encrypted_data = public_key.encrypt(
@@ -78,51 +77,6 @@ MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAIi4Gb8iOGcc05iqNilFb1gM6/iG4fSiECeEaEYN2cxaBVT+
     base64_encoded_body = base64.urlsafe_b64encode(json.dumps(request_body).encode('utf-8')).decode('utf-8')
 
     return base64_encoded_body
-
-def make_api_request(api_url):
-    """通用的API请求方法"""
-    encrypted_params = generate_encrypted_params()
-    
-    headers = {
-        'Content-Type': 'application/json, text/plain, */*',
-        'Param': encrypted_params
-    }
-    
-    _LOGGER.debug(f"API Request URL: {api_url}")
-    _LOGGER.debug(f"Encrypted Params: {encrypted_params}")
-    
-    try:
-        response = requests.get(api_url, headers=headers, timeout=10)
-        
-        _LOGGER.debug(f"API Response status: {response.status_code}")
-        _LOGGER.debug(f"API Response headers: {dict(response.headers)}")
-
-        if response.status_code != 200:
-            # 记录详细的错误信息
-            error_detail = f"Status: {response.status_code}, Response: {response.text}"
-            _LOGGER.error(f"API request failed: {error_detail}")
-            raise Exception(f"API request failed: {error_detail}")
-
-        data = response.json()
-        _LOGGER.debug(f"API Response data: {data}")
-        return data.get("dataResult", {})
-        
-    except requests.exceptions.Timeout:
-        error_msg = "API request timeout"
-        _LOGGER.error(error_msg)
-        raise Exception(error_msg)
-    except requests.exceptions.ConnectionError:
-        error_msg = "API connection error"
-        _LOGGER.error(error_msg)
-        raise Exception(error_msg)
-    except json.JSONDecodeError as e:
-        error_msg = f"API response JSON decode error: {e}"
-        _LOGGER.error(error_msg)
-        raise Exception(error_msg)
-    except Exception as e:
-        error_msg = f"API request error: {str(e)}"
-        _LOGGER.error(error_msg)
-        raise Exception(error_msg)
 
 class HuaRunRQBalanceSensor(SensorEntity):
     """Representation of a Balance Sensor."""
@@ -166,10 +120,8 @@ class HuaRunRQBalanceSensor(SensorEntity):
     def update(self):
         """Fetch new state data for the sensor."""
         try:
-            # 使用通用方法获取余额数据
-            api_url = f'https://mbhapp.crcgas.com/bizonline/pay/queryArrears?consNo={self._cno}'
-            data = make_api_request(api_url)
-            
+            # 获取余额数据
+            data = self.get_arrears_data()
             self._state = data.get("totalGasBalance")
             self._attributes = {
                 "户号": self._cno,
@@ -177,11 +129,37 @@ class HuaRunRQBalanceSensor(SensorEntity):
                 "最近充值金额": data.get("lastChargeAmt"),
                 "最近充值时间": data.get("lastChargeTime")
             }
-            _LOGGER.info(f"Successfully updated balance data for {self._cno}: {self._state}")
+            _LOGGER.info(f"Successfully updated balance data for {self._cno}: {data}")
         except Exception as e:
             _LOGGER.error("Error fetching balance data: %s", e)
             self._state = None
-            self._attributes = {"错误": str(e)}
+            self._attributes = {}
+
+    def get_arrears_data(self):
+        """Get the arrears data from the API."""
+        # 使用通用方法生成加密参数
+        base64_encoded_body = generate_encrypted_params()
+
+        # 使用正确的余额查询接口
+        api_url = 'https://mbhapp.crcgas.com/bizonline/pay/queryArrears?consNo=' + self._cno
+        
+        # 简化headers，只使用必要的参数
+        headers = {
+            'Content-Type': 'application/json, text/plain, */*',
+            'Param': base64_encoded_body
+        }
+        
+        _LOGGER.debug(f"Balance Request URL: {api_url}")
+        
+        response = requests.get(api_url, headers=headers)
+        
+        _LOGGER.debug(f"Balance Response status: {response.status_code}")
+
+        if response.status_code != 200:
+            raise Exception(f"Balance API request failed with status code {response.status_code}")
+
+        data = response.json()
+        return data["dataResult"]
 
 
 class HuaRunRQGasUsageSensor(SensorEntity):
@@ -226,10 +204,8 @@ class HuaRunRQGasUsageSensor(SensorEntity):
     def update(self):
         """Fetch new state data for the sensor."""
         try:
-            # 使用通用方法获取用气量数据
-            api_url = f'https://mbhapp.crcgas.com/bizonline/gasbill/getGasBillList4Chart?consNo={self._cno}&page=1&pageNum=6'
-            data = make_api_request(api_url)
-            
+            # 获取用气量数据
+            data = self.get_bill_data()
             if data and "list" in data and data["list"]:
                 latest_bill = data["list"][0]  # 获取最新账单
                 self._state = latest_bill.get("gasVolume")
@@ -240,7 +216,7 @@ class HuaRunRQGasUsageSensor(SensorEntity):
                     "账单状态": latest_bill.get("billStatus"),
                     "申请单号": latest_bill.get("applicationNo")
                 }
-                _LOGGER.info(f"Successfully updated gas usage data for {self._cno}: {self._state}")
+                _LOGGER.info(f"Successfully updated gas usage data for {self._cno}: {latest_bill}")
             else:
                 _LOGGER.warning(f"No bill data received for {self._cno}")
                 self._state = None
@@ -249,4 +225,31 @@ class HuaRunRQGasUsageSensor(SensorEntity):
         except Exception as e:
             _LOGGER.error("Error fetching gas usage data: %s", e)
             self._state = None
-            self._attributes = {"错误": str(e)}
+            self._attributes = {}
+
+    def get_bill_data(self):
+        """Get the bill data from the API."""
+        # 使用通用方法生成加密参数
+        base64_encoded_body = generate_encrypted_params()
+
+        # 使用正确的用气量API
+        api_url = f'https://mbhapp.crcgas.com/bizonline/gasbill/getGasBillList4Chart?consNo={self._cno}&page=1&pageNum=6'
+        
+        # 简化headers，只使用必要的参数（和余额查询保持一致）
+        headers = {
+            'Content-Type': 'application/json, text/plain, */*',
+            'Param': base64_encoded_body
+        }
+        
+        _LOGGER.debug(f"Gas Usage Request URL: {api_url}")
+        
+        response = requests.get(api_url, headers=headers)
+        
+        _LOGGER.debug(f"Gas Usage Response status: {response.status_code}")
+        _LOGGER.debug(f"Gas Usage Response content: {response.text}")
+
+        if response.status_code != 200:
+            raise Exception(f"Gas Usage API request failed with status code {response.status_code}")
+
+        data = response.json()
+        return data["dataResult"]
