@@ -25,4 +25,4 @@ class ArrearsSensor(CoordinatorEntity, BinarySensorEntity):
     @property
     def is_on(self):
         data = self.coordinator.data.get(self.cno)
-        return data.get("arrearsMoney", 0) > 0 if data else False
+        return data.get("arrearsStatus", 0) > 0 if data else False

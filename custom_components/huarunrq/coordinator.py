@@ -40,7 +40,7 @@ class HuaRunRQCoordinator(DataUpdateCoordinator):
         headers = {
             "Content-Type": "application/json, text/plain, */*",
             "Param": b64_body,
-            "Cookie": "HWWAFSESID=dummy",   # 无需 bo-token
+            "Cookie": "HWWAFSESID=dummy",   # 空 Cookie 即可
         }
 
         async with self._session.get(url, headers=headers) as resp:
