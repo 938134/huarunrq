@@ -11,7 +11,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.backends import default_backend
 
-from homeassistant.components.sensor import PLATFORM_SCHEMA
+from homeassistant.components.sensor import PLATFORM_SCHEMA, SensorEntity
 from homeassistant.const import CONF_NAME
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.device_registry import DeviceEntryType
@@ -24,7 +24,7 @@ CONF_CNO = 'cno'
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
     vol.Required(CONF_CNO): vol.Coerce(str),
-    vol.Optional(CONF_NAME, default='HuaRunRQ Gas Balance'): vol.Coerce(str),
+    vol.Optional(CONF_NAME, default='华润燃气余额'): vol.Coerce(str),
 })
 
 MIN_TIME_BETWEEN_UPDATES = timedelta(hours=1)
@@ -36,7 +36,19 @@ def setup_platform(hass, config, add_entities, discovery_info=None):
 
     add_entities([HuaRunRQSensor(name, cno)], True)
 
-class HuaRunRQSensor(Entity):
+async def async_setup_entry(hass, config_entry, async_add_entities):
+    """Set up the HuaRunRQ sensor based on a config entry."""
+    cns = config_entry.data.get("cns", [])
+    name = config_entry.title
+    
+    sensors = []
+    for cno in cns:
+        sensor_name = f"华润燃气 {cno}"
+        sensors.append(HuaRunRQSensor(sensor_name, cno))
+    
+    async_add_entities(sensors, True)
+
+class HuaRunRQSensor(SensorEntity):
     """Representation of a Sensor."""
 
     def __init__(self, name, cno):
@@ -45,6 +57,7 @@ class HuaRunRQSensor(Entity):
         self._name = name
         self._cno = cno
         self._attributes = {}
+        self._attr_unique_id = f"huarunrq_{cno}"
 
     @property
     def name(self):
@@ -78,7 +91,7 @@ class HuaRunRQSensor(Entity):
         try:
             # 使用你提供的业务逻辑代码获取所有数据
             data = self.get_data()
-            self._state = data["totalGasBalance"]
+            self._state = data.get("totalGasBalance")
             self._attributes = data
             _LOGGER.info(f"Successfully updated data for {self._cno}: {data}")
         except Exception as e:
