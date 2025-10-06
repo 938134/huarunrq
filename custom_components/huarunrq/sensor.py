@@ -125,7 +125,7 @@ MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAIi4Gb8iOGcc05iqNilFb1gM6/iG4fSiECeEaEYN2cxaBVT+
 
         base64_encoded_body = base64.urlsafe_b64encode(json.dumps(request_body).encode('utf-8')).decode('utf-8')
 
-        api_url = 'https://mbhapp.crcgas.com/bizonline/api/h5/pay/queryArrears?authVersion=v2&consNo=' + self._cno
+        api_url = 'https://mbhapp.crcgas.com/bizonline/pay/queryArrears?authVersion=v2&consNo=' + self._cno
         headers = {
             'Content-Type': 'application/json, text/plain, */*',
             'Param': base64_encoded_body
