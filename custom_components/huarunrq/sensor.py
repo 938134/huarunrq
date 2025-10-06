@@ -85,7 +85,6 @@ class HuaRunRQSensor(SensorEntity):
             entry_type=DeviceEntryType.SERVICE,
         )
 
-    @Throttle(MIN_TIME_BETWEEN_UPDATES)
     def update(self):
         """Fetch new state data for the sensor."""
         try:
