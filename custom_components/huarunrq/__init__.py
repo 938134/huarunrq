@@ -12,6 +12,7 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry):
     """Set up HuaRunRQ from a config entry."""
     cns = config_entry.data[CONF_CNS]
+    _LOGGER.info(f"Setting up HuaRunRQ with cns: {cns}")
     
     # 为每个户号创建协调器
     coordinators = {}
@@ -25,6 +26,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry):
 
     # 设置传感器平台
     await hass.config_entries.async_forward_entry_setups(config_entry, ["sensor"])
+    _LOGGER.info("HuaRunRQ setup completed successfully")
     return True
 
 async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigEntry):
