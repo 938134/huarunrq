@@ -243,10 +243,14 @@ MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAIi4Gb8iOGcc05iqNilFb1gM6/iG4fSiECeEaEYN2cxaBVT+
 
         base64_encoded_body = base64.urlsafe_b64encode(json.dumps(request_body).encode('utf-8')).decode('utf-8')
 
+        # 修正API URL - 使用正确的用气量API
         api_url = f'https://mbhapp.crcgas.com/bizonline/gasbill/getGasBillList4Chart?consNo={self._cno}&page=1&pageNum=6'
         headers = {
             'Content-Type': 'application/json, text/plain, */*',
-            'Param': base64_encoded_body
+            'Param': base64_encoded_body,
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36 NetType/WIFI MicroMessenger/7.0.20.1781(0x6700143B) WindowsWechat(0x63090a13) UnifiedPCWindowsWechat(0xf2541022) XWEB/16467 Flue',
+            'Accept': 'application/json, text/plain, */*',
+            'Referer': f'https://mbhapp.crcgas.com/bill?billType=gas&appid=wx9d74a155dad6a4e2&state=2209'
         }
         
         _LOGGER.debug(f"Gas Usage Request URL: {api_url}")
@@ -254,6 +258,7 @@ MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAIi4Gb8iOGcc05iqNilFb1gM6/iG4fSiECeEaEYN2cxaBVT+
         response = requests.get(api_url, headers=headers)
         
         _LOGGER.debug(f"Gas Usage Response status: {response.status_code}")
+        _LOGGER.debug(f"Gas Usage Response content: {response.text}")
 
         if response.status_code != 200:
             raise Exception(f"Gas Usage API request failed with status code {response.status_code}")
