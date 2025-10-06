@@ -50,14 +50,22 @@ MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAIi4Gb8iOGcc05iqNilFb1gM6/iG4fSiECeEaEYN2cxaBVT+
             'Param': base64_encoded_body
         }
 
+        _LOGGER.debug(f"Request URL: {api_url}")
+        _LOGGER.debug(f"Request headers: {headers}")
+
         async with aiohttp.ClientSession() as session:
             async with session.get(api_url, headers=headers) as response:
+                _LOGGER.debug(f"Response status: {response.status}")
                 if response.status == 200:
                     data = await response.json()
+                    _LOGGER.debug(f"Response data: {data}")
                     return data.get("dataResult", {})
                 else:
+                    response_text = await response.text()
+                    _LOGGER.error(f"API request failed with status {response.status}: {response_text}")
                     raise Exception(f"API request failed with status code {response.status}")
     except Exception as e:
+        _LOGGER.error(f"Request error: {e}")
         raise Exception(f"Request error: {e}")
 
 class HuaRunRQDataUpdateCoordinator(DataUpdateCoordinator):
@@ -82,15 +90,17 @@ class HuaRunRQDataUpdateCoordinator(DataUpdateCoordinator):
             
             # 获取余额信息
             arrears_url = API_QUERY_ARREARS.format(cno=self.cno)
-            _LOGGER.debug(f"Fetching arrears data from: {arrears_url}")
+            _LOGGER.info(f"Fetching arrears data for {self.cno}")
             arrears_data = await fetch_data(self.cno, arrears_url)
             if arrears_data:
                 data.update(arrears_data)
-                _LOGGER.debug(f"Arrears data: {arrears_data}")
+                _LOGGER.info(f"Arrears data received: {arrears_data}")
+            else:
+                _LOGGER.warning(f"No arrears data received for {self.cno}")
             
             # 获取账单列表，提取最新月份用气量
             bill_url = API_GAS_BILL_LIST.format(cno=self.cno)
-            _LOGGER.debug(f"Fetching bill data from: {bill_url}")
+            _LOGGER.info(f"Fetching bill data for {self.cno}")
             bill_data = await fetch_data(self.cno, bill_url)
             if bill_data and "list" in bill_data and bill_data["list"]:
                 latest_bill = bill_data["list"][0]  # 最新账单
@@ -100,7 +110,9 @@ class HuaRunRQDataUpdateCoordinator(DataUpdateCoordinator):
                     "current_bill_amount": latest_bill.get("billAmt"),
                     "current_bill_status": latest_bill.get("billStatus")
                 })
-                _LOGGER.debug(f"Bill data: {bill_data}")
+                _LOGGER.info(f"Bill data received: {bill_data}")
+            else:
+                _LOGGER.warning(f"No bill data received for {self.cno}")
             
             return data
             

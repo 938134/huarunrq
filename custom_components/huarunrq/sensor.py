@@ -47,10 +47,13 @@ class HuaRunRQSensor(CoordinatorEntity, SensorEntity):
         data = self.coordinator.data
         
         if self._sensor_type == "balance":
-            return data.get("totalGasBalance")
+            balance = data.get("totalGasBalance")
+            # 确保返回的是数字或None
+            return float(balance) if balance is not None else None
         elif self._sensor_type == "gas_usage":
-            # 返回最新月份的用气量
-            return data.get("current_gas_usage")
+            usage = data.get("current_gas_usage")
+            # 确保返回的是数字或None
+            return float(usage) if usage is not None else None
         
         return None
 
