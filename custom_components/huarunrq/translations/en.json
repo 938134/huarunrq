@@ -1,0 +1,73 @@
+{
+    "config": {
+      "step": {
+        "user": {
+          "title": "Add HuaRun Gas",
+          "description": "Please enter your HuaRun Gas account number (10-12 digits)",
+          "data": {
+            "cno": "Gas Account Number"
+          }
+        }
+      },
+      "error": {
+        "missing_cno": "Please enter your gas account number",
+        "invalid_number": "Please enter a valid 10-12 digit account number",
+        "invalid_interval": "Update interval must be between 1-72 hours"
+      }
+    },
+    "options": {
+      "step": {
+        "init": {
+          "title": "HuaRun Gas Settings",
+          "description": "Adjust data update frequency",
+          "data": {
+            "cno": "Gas Account Number",
+            "update_interval_hours": "Update Interval (hours)"
+          }
+        }
+      },
+      "error": {
+        "missing_cno": "Please enter your gas account number",
+        "invalid_number": "Please enter a valid 10-12 digit account number",
+        "invalid_interval": "Update interval must be between 1-72 hours"
+      }
+    },
+    "entity": {
+      "sensor": {
+        "huarun_gas": {
+          "name": "HuaRun Gas Balance",
+          "state": "Balance",
+          "state_attributes": {
+            "燃气编号": "Gas Account Number",
+            "更新间隔（小时）": "Update Interval",
+            "最后更新时间": "Last Updated"
+          }
+        }
+      }
+    },
+    "services": {
+      "reload": {
+        "name": "Reload",
+        "description": "Reload all HuaRun Gas sensors"
+      },
+      "update": {
+        "name": "Update",
+        "description": "Manually trigger data update for HuaRun Gas sensors"
+      }
+    },
+    "exceptions": {
+      "connection_error": {
+        "message": "Failed to connect to HuaRun Gas server",
+        "description": "Please check your network connection and try again"
+      },
+      "invalid_account": {
+        "message": "Invalid gas account number",
+        "description": "Please verify your account number is correct (10-12 digits)"
+      },
+      "server_error": {
+        "message": "HuaRun Gas server error",
+        "description": "The server is temporarily unavailable, please try again later"
+      }
+    },
+    "title": "HuaRun Gas Integration"
+  }

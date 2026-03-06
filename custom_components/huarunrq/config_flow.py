@@ -1,58 +1,121 @@
-"""Config flow for HuaRunRQ integration."""
+"""Config flow for HuaRun Gas integration."""
+from __future__ import annotations
+
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
+import re
 
-from .const import DOMAIN, CONF_CNS, CONF_SCAN_INTERVAL
+from .const import (
+    DOMAIN,
+    CONF_CNO,
+    CONF_UPDATE_INTERVAL,
+    DEFAULT_UPDATE_INTERVAL,
+    MIN_UPDATE_INTERVAL,
+    MAX_UPDATE_INTERVAL,
+)
 
-class HuaRunRQFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for HuaRunRQ."""
+_LOGGER = logging.getLogger(__name__)
+
+class HuaRunGasFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
+    """Handle a config flow for HuaRun Gas."""
 
     VERSION = 1
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry):
+        return HuaRunGasOptionsFlowHandler(config_entry)
 
     async def async_step_user(self, user_input=None):
         """Handle the initial step."""
         errors = {}
+        
         if user_input is not None:
-            # 验证户号格式（支持逗号分隔的多个户号）
-            cns = [cno.strip() for cno in user_input[CONF_CNS].split(",") if cno.strip()]
-            if not cns:
-                errors[CONF_CNS] = "至少需要一个有效的户号"
-            else:
-                # 创建配置条目
+            cno = user_input.get(CONF_CNO, "").strip()
+            
+            # 验证户号
+            if not cno:
+                errors[CONF_CNO] = "missing_cno"
+            elif not re.match(r"^\d{10,12}$", cno):
+                errors[CONF_CNO] = "invalid_number"
+            
+            if not errors:
+                await self.async_set_unique_id(cno)
+                self._abort_if_unique_id_configured()
+                
                 return self.async_create_entry(
-                    title=f"华润燃气({len(cns)}个户号)",
-                    data={CONF_CNS: cns},
-                    options={CONF_SCAN_INTERVAL: user_input.get(CONF_SCAN_INTERVAL, 3600)}
+                    title=f"华润燃气 ({cno})",
+                    data={CONF_CNO: cno},
+                    options={CONF_UPDATE_INTERVAL: DEFAULT_UPDATE_INTERVAL}
                 )
 
-        # 显示表单
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema({
-                vol.Required(CONF_CNS, description="多个户号用逗号分隔"): str,
-                vol.Optional(CONF_SCAN_INTERVAL, default=3600): int
+                vol.Required(CONF_CNO): str,
             }),
-            errors=errors
+            errors=errors,
+            description_placeholders={
+                "example": "1032246196"
+            }
         )
 
-class HuaRunRQOptionsFlowHandler(config_entries.OptionsFlow):
-    """Handle options flow for HuaRunRQ integration."""
+
+class HuaRunGasOptionsFlowHandler(config_entries.OptionsFlow):
+    """Handle options flow for HuaRun Gas."""
 
     def __init__(self, config_entry):
-        """Initialize HuaRunRQ options flow."""
         self.config_entry = config_entry
 
     async def async_step_init(self, user_input=None):
         """Manage the options."""
+        errors = {}
+        
         if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
+            cno = user_input.get(CONF_CNO, "").strip()
+            interval = user_input.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
+            
+            # 验证户号
+            if not cno:
+                errors[CONF_CNO] = "missing_cno"
+            elif not re.match(r"^\d{10,12}$", cno):
+                errors[CONF_CNO] = "invalid_number"
+            
+            # 验证间隔
+            try:
+                interval = int(interval)
+                if not MIN_UPDATE_INTERVAL <= interval <= MAX_UPDATE_INTERVAL:
+                    errors[CONF_UPDATE_INTERVAL] = "invalid_interval"
+            except ValueError:
+                errors[CONF_UPDATE_INTERVAL] = "invalid_number"
+            
+            if not errors:
+                return self.async_create_entry(
+                    title="",
+                    data={
+                        CONF_CNO: cno,
+                        CONF_UPDATE_INTERVAL: interval
+                    }
+                )
 
-        current_scan_interval = self.config_entry.options.get(CONF_SCAN_INTERVAL, 3600)
+        current_cno = self.config_entry.options.get(
+            CONF_CNO, 
+            self.config_entry.data.get(CONF_CNO, "")
+        )
+        current_interval = self.config_entry.options.get(
+            CONF_UPDATE_INTERVAL, 
+            DEFAULT_UPDATE_INTERVAL
+        )
 
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema({
-                vol.Required(CONF_SCAN_INTERVAL, default=current_scan_interval): int
-            })
+                vol.Required(CONF_CNO, default=current_cno): str,
+                vol.Required(
+                    CONF_UPDATE_INTERVAL, 
+                    default=current_interval
+                ): vol.All(vol.Coerce(int), vol.Range(min=1, max=72)),
+            }),
+            errors=errors
         )

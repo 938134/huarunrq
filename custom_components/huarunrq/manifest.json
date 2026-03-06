@@ -1,16 +1,15 @@
 {
   "domain": "huarunrq",
   "name": "华润燃气",
-  "version": "2.0.0",
-  "documentation": "https://github.com/938134/huarunrq/",
-  "issue_tracker": "https://github.com/938134/huaruanrq/issues",
-  "codeowners": ["@938134"],
-  "dependencies": [],
+  "version": "1.0",
   "requirements": [
-      "aiohttp>=3.8.0",
-      "cryptography>=3.4.0",
-      "requests>=2.25.0"
+      "cryptography>=41.0.0",
+      "requests>=2.25.1"
   ],
+  "dependencies": [],
+  "codeowners": ["@938134"],
   "config_flow": true,
+  "documentation": "https://github.com/938134/huarunrq/",
+  "issue_tracker": "https://github.com/938134/huarunrq/issues",
   "iot_class": "cloud_polling"
 }

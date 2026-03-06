@@ -2,25 +2,45 @@
   "config": {
     "step": {
       "user": {
-        "title": "添加华润燃气户号",
-        "description": "支持多户，用英文逗号分隔，例如：1032246196,1032246197",
+        "title": "添加华润燃气",
+        "description": "请输入您的华润燃气户号（10-12位数字）",
         "data": {
-          "cno_list": "户号列表",
-          "scan_interval": "刷新间隔(秒)"
+          "cno": "燃气户号"
         }
       }
     },
     "error": {
-      "invalid_cno": "户号格式错误，应为 10-12 位数字，多个用逗号分隔"
+      "missing_cno": "请输入燃气户号",
+      "invalid_number": "请输入有效的10-12位数字户号",
+      "invalid_interval": "更新间隔必须在1-72小时之间"
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "调整户号或间隔",
+        "title": "华润燃气设置",
+        "description": "调整数据更新频率",
         "data": {
-          "cno_list": "户号列表",
-          "scan_interval": "刷新间隔(秒)"
+          "cno": "燃气户号",
+          "update_interval_hours": "更新间隔（小时）"
+        }
+      }
+    },
+    "error": {
+      "missing_cno": "请输入燃气户号",
+      "invalid_number": "请输入有效的10-12位数字户号",
+      "invalid_interval": "更新间隔必须在1-72小时之间"
+    }
+  },
+  "entity": {
+    "sensor": {
+      "huarun_gas": {
+        "name": "华润燃气余额",
+        "state": "余额",
+        "state_attributes": {
+          "燃气编号": "燃气户号",
+          "更新间隔（小时）": "更新间隔",
+          "最后更新时间": "最后更新"
         }
       }
     }
