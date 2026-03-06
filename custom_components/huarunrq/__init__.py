@@ -1,50 +1,79 @@
-"""HuaRun Gas integration core logic."""
-from __future__ import annotations
-
+"""集成核心逻辑"""
 import logging
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryNotReady
 
-from .const import DOMAIN, PLATFORMS
+from .const import DOMAIN, PLATFORMS, CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL, \
+    LOG_SETUP_ENTRY, LOG_PLATFORM_LOAD_FAILED, LOG_UNLOAD_ENTRY
+from .i18n import HuarunI18n
 
 _LOGGER = logging.getLogger(__name__)
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up HuaRun Gas from a config entry."""
+async def async_setup(hass: HomeAssistant, config: dict) -> bool:
+    """初始化集成（YAML配置支持）"""
     hass.data.setdefault(DOMAIN, {})
     
-    # 使用新版API
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    # 预初始化i18n，确保配置流可用
+    i18n = HuarunI18n(hass, DOMAIN)
+    await i18n.init_async()
+    hass.data[DOMAIN]['i18n'] = i18n
     
-    # 添加更新监听器
-    entry.async_on_unload(entry.add_update_listener(async_update_options))
-    
-    _LOGGER.info("Successfully set up entry: %s", entry.title)
     return True
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Unload a config entry."""
-    if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
-        hass.data[DOMAIN].pop(entry.entry_id, None)
-        _LOGGER.info("Successfully unloaded entry: %s", entry.title)
+async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
+    """通过配置项初始化集成"""
+    # 获取已初始化的i18n
+    i18n = hass.data[DOMAIN].get('i18n')
+    if not i18n:
+        i18n = HuarunI18n(hass, DOMAIN)
+        await i18n.init_async()
+        hass.data[DOMAIN]['i18n'] = i18n
+    
+    setup_log_msg = i18n.get_text(LOG_SETUP_ENTRY, "加载配置项 {entry_id}（标题：{title}）")
+    _LOGGER.info(setup_log_msg.format(entry_id=config_entry.entry_id, title=config_entry.title))
+
+    hass.data[DOMAIN][config_entry.entry_id] = {
+        "config": config_entry.data,
+    }
+
+    if CONF_UPDATE_INTERVAL not in config_entry.options:
+        options = {**config_entry.options, CONF_UPDATE_INTERVAL: DEFAULT_UPDATE_INTERVAL}
+        hass.config_entries.async_update_entry(config_entry, options=options)
+
+    try:
+        await hass.config_entries.async_forward_entry_setups(config_entry, PLATFORMS)
+    except Exception as e:
+        platform_load_error_msg = i18n.get_text(LOG_PLATFORM_LOAD_FAILED, "平台加载失败：{error}")
+        _LOGGER.exception(platform_load_error_msg.format(error=str(e)))
+        raise ConfigEntryNotReady from e
+
+    config_entry.async_on_unload(
+        config_entry.add_update_listener(async_update_options)
+    )
+    return True
+
+
+async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
+    """卸载配置项"""
+    i18n = hass.data[DOMAIN].get('i18n')
+    if i18n:
+        unload_log_msg = i18n.get_text(LOG_UNLOAD_ENTRY, "卸载配置项 {entry_id}")
+    else:
+        unload_log_msg = "卸载配置项 {entry_id}"
+    
+    _LOGGER.info(unload_log_msg.format(entry_id=config_entry.entry_id))
+
+    unload_ok = await hass.config_entries.async_unload_platforms(config_entry, PLATFORMS)
+
+    if unload_ok and config_entry.entry_id in hass.data[DOMAIN]:
+        hass.data[DOMAIN].pop(config_entry.entry_id)
+        # 不要删除i18n，因为可能还有其他配置项在使用
     return unload_ok
 
 
-async def async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Update options."""
-    await hass.config_entries.async_reload(entry.entry_id)
-    _LOGGER.debug("Options updated for entry: %s", entry.title)
-
-
-async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Migrate old entry."""
-    _LOGGER.debug("Migrating from version %s", entry.version)
-    
-    if entry.version == 1:
-        # 迁移逻辑
-        entry.version = 2
-    
-    _LOGGER.info("Migration to version %s successful", entry.version)
-    return True
+async def async_update_options(hass: HomeAssistant, config_entry: ConfigEntry) -> None:
+    """配置更新后重新加载集成"""
+    await hass.config_entries.async_reload(config_entry.entry_id)

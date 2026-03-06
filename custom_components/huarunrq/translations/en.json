@@ -1,73 +1,35 @@
 {
-    "config": {
+  "config_flow": {
       "step": {
-        "user": {
-          "title": "Add HuaRun Gas",
-          "description": "Please enter your HuaRun Gas account number (10-12 digits)",
-          "data": {
-            "cno": "Gas Account Number"
+          "user": {
+              "title": "User Configuration Step Title",
+              "description": "User configuration step description",
+              "data": {
+                  "attr_cno": "User Account Number",
+                  "attr_name": "Sensor Name",
+                  "attr_update_interval": "Data Update Interval (hours)"
+              }
+          },
+          "options": {
+              "title": "Options Configuration Step Title",
+              "description": "Options configuration step description",
+              "data": {
+                  "attr_cno": "User Account Number",
+                  "attr_name": "Sensor Name",
+                  "attr_update_interval": "Data Update Interval (hours)"
+              }
           }
-        }
       },
-      "error": {
-        "missing_cno": "Please enter your gas account number",
-        "invalid_number": "Please enter a valid 10-12 digit account number",
-        "invalid_interval": "Update interval must be between 1-72 hours"
-      }
-    },
-    "options": {
-      "step": {
-        "init": {
-          "title": "HuaRun Gas Settings",
-          "description": "Adjust data update frequency",
-          "data": {
-            "cno": "Gas Account Number",
-            "update_interval_hours": "Update Interval (hours)"
-          }
-        }
+      "log": {
+          "setup_entry": "Load configuration entry {entry_id} (Title: {title})",
+          "platform_load_failed": "Platform loading failed: {error}",
+          "unload_entry": "Unload configuration entry {entry_id}"
       },
-      "error": {
-        "missing_cno": "Please enter your gas account number",
-        "invalid_number": "Please enter a valid 10-12 digit account number",
-        "invalid_interval": "Update interval must be between 1-72 hours"
+      "errors": {
+          "error_invalid_cno": "Invalid account number",
+          "error_invalid_interval": "Invalid update interval",
+          "error_cno_not_found": "Account number not found",
+          "error_api_format": "API format error"
       }
-    },
-    "entity": {
-      "sensor": {
-        "huarun_gas": {
-          "name": "HuaRun Gas Balance",
-          "state": "Balance",
-          "state_attributes": {
-            "燃气编号": "Gas Account Number",
-            "更新间隔（小时）": "Update Interval",
-            "最后更新时间": "Last Updated"
-          }
-        }
-      }
-    },
-    "services": {
-      "reload": {
-        "name": "Reload",
-        "description": "Reload all HuaRun Gas sensors"
-      },
-      "update": {
-        "name": "Update",
-        "description": "Manually trigger data update for HuaRun Gas sensors"
-      }
-    },
-    "exceptions": {
-      "connection_error": {
-        "message": "Failed to connect to HuaRun Gas server",
-        "description": "Please check your network connection and try again"
-      },
-      "invalid_account": {
-        "message": "Invalid gas account number",
-        "description": "Please verify your account number is correct (10-12 digits)"
-      },
-      "server_error": {
-        "message": "HuaRun Gas server error",
-        "description": "The server is temporarily unavailable, please try again later"
-      }
-    },
-    "title": "HuaRun Gas Integration"
   }
+}
